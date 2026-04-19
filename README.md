@@ -1,64 +1,39 @@
 # Simplified Banking System
 
-This project is a small REST API that implements the three required assignment features:
+This project is a small REST API for a simplified banking system. It supports:
 
-1. `POST /login` authenticates a user with email and PIN.
-2. `GET /balance` returns the authenticated user's current balance.
-3. `POST /deposit` adds funds to the authenticated user's account.
+1. `POST /login` to authenticate a user using email and PIN
+2. `GET /balance` to fetch the current account balance
+3. `POST /deposit` to add funds to an account
 
-The application uses a real SQLite database and automatically seeds the required users on first run:
+The application uses a real SQLite database and seeds two demo users on first run:
 
 - Alice: `alice@example.com` / `1234` / starting balance `1000.00`
 - Bob: `bob@example.com` / `5678` / starting balance `500.00`
 
-## Design Thought Process
+## Tech Stack
 
-I tried to optimize for three things:
+- Python 3.9+
+- SQLite
+- Standard library HTTP server
 
-- **Clarity**: the code should be easy to explain in an interview.
-- **Correctness for the assignment scope**: real persistence, basic authentication, safe money handling, and clear errors.
-- **Small surface area**: enough structure to show good design, but not so much that the assignment becomes over-engineered.
+## Architecture
 
-That led to a simple layered design:
+The application is organized into small layers:
 
-- **HTTP layer**: parses requests and returns JSON responses.
-- **Service layer**: holds the business rules for login, balance lookup, and deposit.
-- **Database layer**: owns SQLite queries, transactions, and seed data.
+- `server.py`: HTTP transport and request/response handling
+- `service.py`: business use cases
+- `database.py`: SQLite persistence
+- `models.py`: domain records
+- `money.py`: money parsing and formatting helpers
+- `contracts.py`: abstraction boundaries between layers
 
-I also treated maintainability as part of the design. Each method in the codebase now has a short docstring explaining its responsibility, so the implementation is easier to review and discuss during the interview.
+Key implementation choices:
 
-## SOLID Review
-
-I reviewed the code against SOLID and tightened the areas that were only partially covered:
-
-- **Single Responsibility Principle**: domain records and money parsing/formatting now live in dedicated modules instead of the persistence module handling those concerns itself.
-- **Open/Closed Principle**: the HTTP layer now depends on a use-case contract, so new service implementations can be swapped in without rewriting the server.
-- **Liskov Substitution Principle**: the service works against protocol-based contracts, which makes alternate repository implementations substitutable as long as they honor the same behavior.
-- **Interface Segregation Principle**: the HTTP layer depends only on banking use cases, while the service depends only on repository operations. Neither layer is forced to know about lower-level details it does not use.
-- **Dependency Inversion Principle**: `BankingService` no longer depends directly on the concrete SQLite class, and the server no longer constructs the service internally. Both rely on abstractions and are wired together in `app.py`.
-
-## Why I Chose This Approach
-
-- **Language**: Python 3 because it is quick to read, easy to run locally, and lets me keep the code focused on the API behavior instead of framework boilerplate.
-- **Database**: SQLite because the assignment asked for a real database and SQLite keeps setup simple for a local take-home exercise.
-- **Structure**: I separated the code into a database layer, a service layer, security helpers, and the HTTP server so the responsibilities stay clear and the code is easier to explain in a follow-up interview.
-- **SOLID boundaries**: the project now uses explicit protocols for repository and use-case boundaries, which keeps the layers loosely coupled and easier to extend or test.
-- **Authentication choice**: Login returns a bearer token stored in the database, which keeps the authenticated endpoints simple to test from `curl` or Postman.
-- **Session management**: Sessions have an expiration time and expired sessions are cleaned up from the database.
-- **Money handling**: Balances are stored as integer cents in the database to avoid floating-point rounding issues.
-- **Auditability**: Every seeded opening balance and every deposit is written to a `transactions` table, so balance changes are not just updates to a single number.
-- **Operational hardening**: The server validates configuration from environment variables, enforces JSON request bodies, limits request size, and applies SQLite settings for better concurrency and reliability.
-- **Dependencies**: The runtime uses only the Python standard library, so the project can be started immediately without installing extra packages.
-
-## Data Model
-
-The database has three tables:
-
-- `users`: stores the customer identity, hashed PIN, and current balance in cents.
-- `sessions`: stores bearer tokens created after login along with an expiration timestamp.
-- `transactions`: stores opening balances and deposits as an audit trail.
-
-I kept the current balance on the `users` table for quick reads from `/balance`, while also writing each deposit to `transactions` so the system still has a simple history of balance-changing events. For a take-home assignment, this is a good middle ground between simplicity and traceability.
+- PINs are stored as salted PBKDF2 hashes, not plain text
+- balances are stored as integer cents to avoid floating-point errors
+- sessions are token-based and time-bound
+- deposits are recorded in a `transactions` table for basic auditability
 
 ## Project Structure
 
@@ -79,22 +54,18 @@ test website/
 └── README.md
 ```
 
-## Setup And Run
+## Getting Started
 
-### Prerequisites
-
-- Python 3.9+
-
-### Start the API
-
-From the `test website` folder:
+### Run locally
 
 ```bash
 cd "test website"
 python3 app.py
 ```
 
-The server starts on `http://127.0.0.1:8000` by default.
+The API starts at `http://127.0.0.1:8000`.
+
+### Configuration
 
 Optional environment variables:
 
@@ -102,15 +73,22 @@ Optional environment variables:
 BANK_API_HOST=127.0.0.1
 BANK_API_PORT=8000
 BANK_API_DB_PATH=./bank.db
+BANK_API_CURRENCY=USD
 BANK_API_SESSION_TTL_SECONDS=3600
 BANK_API_SQLITE_TIMEOUT_SECONDS=5
 BANK_API_MAX_BODY_BYTES=16384
 BANK_API_LOG_LEVEL=INFO
 ```
 
-## How To Test The APIs
+## API Endpoints
 
-### 1. Login
+### Health check
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+### Login
 
 ```bash
 curl -X POST http://127.0.0.1:8000/login \
@@ -132,9 +110,7 @@ Example success response:
 }
 ```
 
-### 2. Balance
-
-Use the token returned by `/login`:
+### Balance
 
 ```bash
 curl http://127.0.0.1:8000/balance \
@@ -155,7 +131,7 @@ Example response:
 }
 ```
 
-### 3. Deposit
+### Deposit
 
 ```bash
 curl -X POST http://127.0.0.1:8000/deposit \
@@ -182,33 +158,20 @@ Example response:
 }
 ```
 
-## Automated Tests
-
-Run the included tests with:
-
-```bash
-cd "test website"
-python3 -m unittest discover -s tests -v
-```
-
-The tests cover the main login, balance, and deposit flows through the shared service layer that powers the REST API, verify that seeded balances are recorded as transaction entries, and confirm that the service works against a repository abstraction rather than a hard-coded SQLite implementation.
-They also verify that expired sessions are rejected.
-
 ## Error Handling
 
-The API returns clear JSON errors for the required cases:
+The API returns JSON errors with appropriate HTTP status codes for:
 
-- Invalid email or PIN: `401 Unauthorized`
-- Missing or invalid bearer token: `401 Unauthorized`
-- Expired bearer token: `401 Unauthorized`
-- Depositing a non-positive amount: `400 Bad Request`
-- Invalid JSON body or missing required fields: `400 Bad Request`
-- Unsupported content type: `415 Unsupported Media Type`
-- Oversized request body: `413 Request Entity Too Large`
-- Database errors: `500 Internal Server Error`
-- Unexpected errors: `500 Internal Server Error`
+- invalid email or PIN
+- missing or invalid bearer token
+- expired bearer token
+- non-positive deposit amounts
+- invalid JSON or missing required fields
+- unsupported content type
+- oversized request bodies
+- database or unexpected server errors
 
-Example error response:
+Example:
 
 ```json
 {
@@ -216,23 +179,23 @@ Example error response:
 }
 ```
 
-## Assumptions
+## Running Tests
 
-- This implementation is production-oriented for the requested scope, but the business scope remains intentionally limited to login, balance, and deposit.
-- A successful login creates a bearer token and the protected endpoints use that token.
-- Sessions expire after `BANK_API_SESSION_TTL_SECONDS` seconds.
-- Seed users are inserted only if they do not already exist, so rerunning the app does not overwrite balances.
-- To reset the database back to the original seeded balances, delete `bank.db` and start the server again.
-- Deposit supports amounts with up to two decimal places.
-- SQLite timestamps are generated by the database and stored in UTC-style text format.
+Run the automated tests with:
 
-## Scope Boundaries
+```bash
+cd "test website"
+python3 -m unittest discover -s tests -v
+```
 
-- No signup, withdrawal, transfer, or logout endpoints because they were outside the assignment scope.
-- The API does not include authorization roles, rate limiting, or advanced validation rules.
-- There is no ORM; direct SQL keeps the project compact and transparent.
+## Notes
 
-## Possible Future Enhancements
+- Seed users are inserted only if they do not already exist
+- rerunning the app does not reset balances automatically
+- deleting `bank.db` will recreate the database with the original seeded values
+- deposit amounts support up to 2 decimal places
+
+## Future Enhancements
 
 - Move to PostgreSQL and add database migrations.
 - Add logout, session revocation, and stronger authentication controls.
