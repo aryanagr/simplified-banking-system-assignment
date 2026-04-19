@@ -11,8 +11,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import urlparse
 
-from banking_api.database import BankingDatabase
-from banking_api.service import ApiError, BankingService, extract_bearer_token
+from banking_api.contracts import BankingUseCases
+from banking_api.service import ApiError, extract_bearer_token
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,12 +26,10 @@ class BankingHTTPServer(ThreadingHTTPServer):
 
 
 def build_handler(
-    database: BankingDatabase,
-    currency: str = "USD",
+    service: BankingUseCases,
     max_request_body_bytes: int = 16_384,
 ):
     """Build a request handler class bound to the provided runtime dependencies."""
-    service = BankingService(database, currency=currency)
 
     class BankingRequestHandler(BaseHTTPRequestHandler):
         """Handle the REST endpoints exposed by the banking API."""
@@ -196,14 +194,12 @@ def build_handler(
 def create_server(
     host: str,
     port: int,
-    database: BankingDatabase,
-    currency: str = "USD",
+    service: BankingUseCases,
     max_request_body_bytes: int = 16_384,
 ) -> BankingHTTPServer:
     """Create a configured HTTP server instance for the banking API."""
     handler_class = build_handler(
-        database,
-        currency=currency,
+        service,
         max_request_body_bytes=max_request_body_bytes,
     )
     return BankingHTTPServer((host, port), handler_class)

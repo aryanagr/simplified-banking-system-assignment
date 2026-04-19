@@ -5,13 +5,12 @@ from __future__ import annotations
 import secrets
 import sqlite3
 import time
-from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Optional
 
+from banking_api.models import TransactionRecord, UserRecord
 from banking_api.security import hash_pin, verify_pin
-
+ 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,63 +43,6 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
 """
-
-
-@dataclass
-class UserRecord:
-    id: int
-    name: str
-    email: str
-    balance_cents: int
-
-    def to_public_dict(self) -> dict:
-        """Convert the user record into a safe API response shape."""
-        return {
-            "id": self.id,
-            "name": self.name,
-            "email": self.email,
-        }
-
-
-@dataclass
-class TransactionRecord:
-    id: int
-    transaction_type: str
-    amount_cents: int
-    balance_after_cents: int
-    created_at: str
-
-    def to_public_dict(self) -> dict:
-        """Convert the transaction record into a client-facing response shape."""
-        return {
-            "id": self.id,
-            "type": self.transaction_type,
-            "amount": format_cents(self.amount_cents),
-            "balance_after": format_cents(self.balance_after_cents),
-            "created_at": self.created_at,
-        }
-
-
-def parse_amount_to_cents(raw_amount) -> int:
-    """Parse a JSON amount into integer cents."""
-    try:
-        amount = Decimal(str(raw_amount))
-    except (InvalidOperation, ValueError, TypeError):
-        raise ValueError("Amount must be a valid number.")
-
-    if amount <= 0:
-        raise ValueError("Deposit amount must be greater than zero.")
-
-    normalized = amount.quantize(Decimal("0.01"))
-    if normalized != amount:
-        raise ValueError("Amount cannot have more than 2 decimal places.")
-
-    return int(normalized * 100)
-
-
-def format_cents(cents: int) -> str:
-    """Format cents as a string with two decimal places."""
-    return format(Decimal(cents) / Decimal("100"), ".2f")
 
 
 class BankingDatabase:

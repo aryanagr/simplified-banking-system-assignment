@@ -11,8 +11,57 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from banking_api.contracts import BankingRepository
 from banking_api.database import BankingDatabase
+from banking_api.models import TransactionRecord, UserRecord
 from banking_api.service import ApiError, BankingService, extract_bearer_token
+
+
+class FakeBankingRepository:
+    """Test double that satisfies the banking repository contract."""
+
+    def __init__(self):
+        """Create a deterministic fake repository for service-level tests."""
+        self.user = UserRecord(
+            id=1,
+            name="Alice",
+            email="alice@example.com",
+            balance_cents=1000_00,
+        )
+        self.token = "fake-token"
+        self.balance_cents = self.user.balance_cents
+
+    def authenticate_user(self, email: str, pin: str):
+        """Return a fake authenticated user for the seeded credentials."""
+        if email == "alice@example.com" and pin == "1234":
+            return self.user
+        return None
+
+    def create_session(self, user_id: int) -> str:
+        """Return a deterministic token for test assertions."""
+        return self.token
+
+    def get_user_by_token(self, token: str):
+        """Return the fake user when the fake token is supplied."""
+        if token == self.token:
+            return self.user
+        return None
+
+    def deposit(self, user_id: int, amount_cents: int) -> TransactionRecord:
+        """Persist the deposit in memory and return a fake transaction record."""
+        self.balance_cents += amount_cents
+        self.user.balance_cents = self.balance_cents
+        return TransactionRecord(
+            id=1,
+            transaction_type="deposit",
+            amount_cents=amount_cents,
+            balance_after_cents=self.balance_cents,
+            created_at="2026-04-19 00:00:00",
+        )
+
+    def get_balance(self, user_id: int) -> int:
+        """Return the current in-memory balance."""
+        return self.balance_cents
 
 
 class BankingAPITestCase(unittest.TestCase):
@@ -114,6 +163,19 @@ class BankingAPITestCase(unittest.TestCase):
 
         self.assertEqual(context.exception.status_code, 401)
         self.assertEqual(context.exception.message, "Invalid or expired token.")
+
+    def test_service_accepts_repository_abstraction(self):
+        """The service should work with any repository that satisfies the contract."""
+        fake_repository: BankingRepository = FakeBankingRepository()
+        service = BankingService(fake_repository)
+
+        login_response = service.login("alice@example.com", "1234")
+        balance_response = service.get_balance(login_response["token"])
+        deposit_response = service.deposit(login_response["token"], "10.00")
+
+        self.assertEqual(login_response["token"], "fake-token")
+        self.assertEqual(balance_response["balance"], "1000.00")
+        self.assertEqual(deposit_response["balance"], "1010.00")
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from typing import Optional
 
 from banking_api.config import AppConfig
 from banking_api.database import BankingDatabase
+from banking_api.service import BankingService
 from banking_api.server import create_server
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -37,11 +38,11 @@ def build_server(
         sqlite_timeout_seconds=runtime_config.sqlite_timeout_seconds,
     )
     database.initialize()
+    service = BankingService(database, currency=runtime_config.currency)
     return create_server(
         host=runtime_config.host,
         port=runtime_config.port,
-        database=database,
-        currency=runtime_config.currency,
+        service=service,
         max_request_body_bytes=runtime_config.max_request_body_bytes,
     )
 

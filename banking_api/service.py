@@ -5,7 +5,8 @@ from __future__ import annotations
 from http import HTTPStatus
 from typing import Any
 
-from banking_api.database import BankingDatabase, format_cents, parse_amount_to_cents
+from banking_api.contracts import BankingRepository
+from banking_api.money import format_cents, parse_amount_to_cents
 
 
 class ApiError(Exception):
@@ -36,9 +37,9 @@ def extract_bearer_token(header_value: str) -> str:
 class BankingService:
     """Implements the core banking use cases exposed by the API."""
 
-    def __init__(self, database: BankingDatabase, currency: str = "USD"):
-        """Create the service with the database and response currency settings."""
-        self.database = database
+    def __init__(self, repository: BankingRepository, currency: str = "USD"):
+        """Create the service with the repository and response currency settings."""
+        self.repository = repository
         self.currency = currency
 
     def login(self, email_raw: Any, pin_raw: Any) -> dict[str, Any]:
@@ -52,11 +53,11 @@ class BankingService:
                 "Both email and PIN are required.",
             )
 
-        user = self.database.authenticate_user(email=email, pin=pin)
+        user = self.repository.authenticate_user(email=email, pin=pin)
         if user is None:
             raise ApiError(HTTPStatus.UNAUTHORIZED, "Invalid email or PIN.")
 
-        token = self.database.create_session(user.id)
+        token = self.repository.create_session(user.id)
         return {
             "message": "Login successful.",
             "token": token,
@@ -66,7 +67,7 @@ class BankingService:
     def get_balance(self, token: str) -> dict[str, Any]:
         """Return the current balance for the user behind the provided bearer token."""
         user = self._require_authenticated_user(token)
-        balance_cents = self.database.get_balance(user.id)
+        balance_cents = self.repository.get_balance(user.id)
         return {
             "user": user.to_public_dict(),
             "balance": format_cents(balance_cents),
@@ -84,7 +85,7 @@ class BankingService:
         except ValueError as error:
             raise ApiError(HTTPStatus.BAD_REQUEST, str(error))
 
-        transaction = self.database.deposit(user.id, amount_cents)
+        transaction = self.repository.deposit(user.id, amount_cents)
         return {
             "message": "Deposit successful.",
             "deposited": format_cents(amount_cents),
@@ -99,7 +100,7 @@ class BankingService:
         if not normalized_token:
             raise ApiError(HTTPStatus.UNAUTHORIZED, "Authentication token is required.")
 
-        user = self.database.get_user_by_token(normalized_token)
+        user = self.repository.get_user_by_token(normalized_token)
         if user is None:
             raise ApiError(HTTPStatus.UNAUTHORIZED, "Invalid or expired token.")
 

@@ -27,11 +27,22 @@ That led to a simple layered design:
 
 I also treated maintainability as part of the design. Each method in the codebase now has a short docstring explaining its responsibility, so the implementation is easier to review and discuss during the interview.
 
+## SOLID Review
+
+I reviewed the code against SOLID and tightened the areas that were only partially covered:
+
+- **Single Responsibility Principle**: domain records and money parsing/formatting now live in dedicated modules instead of the persistence module handling those concerns itself.
+- **Open/Closed Principle**: the HTTP layer now depends on a use-case contract, so new service implementations can be swapped in without rewriting the server.
+- **Liskov Substitution Principle**: the service works against protocol-based contracts, which makes alternate repository implementations substitutable as long as they honor the same behavior.
+- **Interface Segregation Principle**: the HTTP layer depends only on banking use cases, while the service depends only on repository operations. Neither layer is forced to know about lower-level details it does not use.
+- **Dependency Inversion Principle**: `BankingService` no longer depends directly on the concrete SQLite class, and the server no longer constructs the service internally. Both rely on abstractions and are wired together in `app.py`.
+
 ## Why I Chose This Approach
 
 - **Language**: Python 3 because it is quick to read, easy to run locally, and lets me keep the code focused on the API behavior instead of framework boilerplate.
 - **Database**: SQLite because the assignment asked for a real database and SQLite keeps setup simple for a local take-home exercise.
 - **Structure**: I separated the code into a database layer, a service layer, security helpers, and the HTTP server so the responsibilities stay clear and the code is easier to explain in a follow-up interview.
+- **SOLID boundaries**: the project now uses explicit protocols for repository and use-case boundaries, which keeps the layers loosely coupled and easier to extend or test.
 - **Authentication choice**: Login returns a bearer token stored in the database, which keeps the authenticated endpoints simple to test from `curl` or Postman.
 - **Session management**: Sessions have an expiration time and expired sessions are cleaned up from the database.
 - **Money handling**: Balances are stored as integer cents in the database to avoid floating-point rounding issues.
@@ -56,7 +67,10 @@ test website/
 ├── app.py
 ├── bank.db                # created automatically on first run
 ├── banking_api/
+│   ├── contracts.py
 │   ├── database.py
+│   ├── models.py
+│   ├── money.py
 │   ├── security.py
 │   ├── service.py
 │   └── server.py
@@ -177,7 +191,7 @@ cd "test website"
 python3 -m unittest discover -s tests -v
 ```
 
-The tests cover the main login, balance, and deposit flows through the shared service layer that powers the REST API, and also verify that seeded balances are recorded as transaction entries.
+The tests cover the main login, balance, and deposit flows through the shared service layer that powers the REST API, verify that seeded balances are recorded as transaction entries, and confirm that the service works against a repository abstraction rather than a hard-coded SQLite implementation.
 They also verify that expired sessions are rejected.
 
 ## Error Handling
