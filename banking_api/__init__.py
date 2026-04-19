@@ -1,0 +1,2 @@
+"""Simplified banking API package."""
+
