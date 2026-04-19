@@ -56,14 +56,47 @@ test website/
 
 ## Getting Started
 
+### Prerequisites
+
+- Python 3.9 or newer
+- `curl` for testing the endpoints from the terminal
+
+No third-party Python packages are required.
+
 ### Run locally
 
+If you are starting from a fresh clone:
+
 ```bash
-cd "test website"
+git clone git@github.com-personal:aryanagr/simplified-banking-system-assignment.git
+cd simplified-banking-system-assignment
+```
+
+If you already have the project locally, just open the project directory and run:
+
+```bash
 python3 app.py
 ```
 
 The API starts at `http://127.0.0.1:8000`.
+
+### Verify that it is running
+
+Open a new terminal and call the health endpoint:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Expected response:
+
+```json
+{"status": "ok"}
+```
+
+### Stop the server
+
+Press `Ctrl + C` in the terminal where `python3 app.py` is running.
 
 ### Configuration
 
